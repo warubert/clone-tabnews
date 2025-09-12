@@ -2,9 +2,7 @@ services:
   database:
     image: postgres:16.0-alpine3.18
     container_name: clone-tabnews-database
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: example
-      POSTGRES_DB: clone_tabnews_dev
+    env_file:
+      - ../.env
     ports:
       - "5432:5432"
