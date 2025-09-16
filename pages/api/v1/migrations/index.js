@@ -14,6 +14,10 @@ export default async function migrations(request, response) {
     migrationsTable: "pgmigrations",
   };
 
+  if (request.method !== "GET" && request.method !== "POST") {
+    return response.status(405).json({ message: "Method not allowed" });
+  }
+
   if (request.method === "GET") {
     const pendingMigrations = await migrationRunner(defaultMigrationOptions);
     await dbClient.end();
@@ -34,6 +38,4 @@ export default async function migrations(request, response) {
 
     return response.status(200).json(migratedMigrations);
   }
-
-  return response.status(405).json({ message: "Method not allowed" });
 }
