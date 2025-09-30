@@ -1,4 +1,5 @@
 import database from "infra/database.js";
+import password from "models/password.js";
 import { ValidationError, NotFoundError } from "infra/errors.js";
 
 async function findOneByUsername(username) {
@@ -35,51 +36,10 @@ async function findOneByUsername(username) {
 async function create(userInputValues) {
   await validateUniqueEmail(userInputValues.email);
   await validateUniqueUsername(userInputValues.username);
+  await hashPasswordInObject(userInputValues);
 
   const newUser = await runInsertQuery(userInputValues);
   return newUser;
-
-  async function validateUniqueEmail(email) {
-    const results = await database.query({
-      text: `
-        SELECT
-          email
-        FROM
-          users
-        WHERE
-          LOWER(email) = LOWER($1)
-        ;`,
-      values: [email],
-    });
-
-    if (results.rowCount > 0) {
-      throw new ValidationError({
-        message: "Email já utilizado",
-        action: "utilize outro email",
-      });
-    }
-  }
-
-  async function validateUniqueUsername(username) {
-    const results = await database.query({
-      text: `
-        SELECT
-          username
-        FROM
-          users
-        WHERE
-          LOWER(username) = LOWER($1)
-        ;`,
-      values: [username],
-    });
-
-    if (results.rowCount > 0) {
-      throw new ValidationError({
-        message: "Username já utilizado",
-        action: "Utilize outro username",
-      });
-    }
-  }
 
   async function runInsertQuery(userInputValues) {
     const result = await database.query({
@@ -100,6 +60,97 @@ async function create(userInputValues) {
   }
 }
 
-const user = { create, findOneByUsername };
+async function update(username, userInputValues) {
+  const currentUser = await findOneByUsername(username);
+
+  if ("email" in userInputValues) {
+    await validateUniqueEmail(userInputValues.email);
+  }
+  if ("username" in userInputValues) {
+    await validateUniqueUsername(userInputValues.username);
+  }
+  if ("password" in userInputValues) {
+    await hashPasswordInObject(userInputValues);
+  }
+
+  const userWithNewValues = { ...currentUser, ...userInputValues };
+  const updatedUser = await runUpdateQuery(userWithNewValues);
+  return updatedUser;
+
+  async function runUpdateQuery(userWithNewValues) {
+    const results = await database.query({
+      text: `
+      UPDATE
+        users
+      SET
+        username = $2,
+        email = $3,
+        password = $4,
+        updated_at = timezone('utc',now())
+      WHERE
+        id = $1
+      RETURNING
+        *
+      `,
+      values: [
+        userWithNewValues.id,
+        userWithNewValues.username,
+        userWithNewValues.email,
+        userWithNewValues.password,
+      ],
+    });
+
+    return results.rows[0];
+  }
+}
+
+async function validateUniqueUsername(username) {
+  const results = await database.query({
+    text: `
+        SELECT
+          username
+        FROM
+          users
+        WHERE
+          LOWER(username) = LOWER($1)
+        ;`,
+    values: [username],
+  });
+
+  if (results.rowCount > 0) {
+    throw new ValidationError({
+      message: "Username já utilizado",
+      action: "Utilize outro username",
+    });
+  }
+}
+
+async function validateUniqueEmail(email) {
+  const results = await database.query({
+    text: `
+        SELECT
+          email
+        FROM
+          users
+        WHERE
+          LOWER(email) = LOWER($1)
+        ;`,
+    values: [email],
+  });
+
+  if (results.rowCount > 0) {
+    throw new ValidationError({
+      message: "Email já utilizado",
+      action: "utilize outro email",
+    });
+  }
+}
+
+async function hashPasswordInObject(userInputValues) {
+  const hashedPassword = await password.hash(userInputValues.password);
+  userInputValues.password = hashedPassword;
+}
+
+const user = { create, findOneByUsername, update };
 
 export default user;
